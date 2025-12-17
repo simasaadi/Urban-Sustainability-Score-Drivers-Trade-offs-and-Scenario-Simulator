@@ -613,22 +613,20 @@ scenario_df = run_scenario(baseline_df, deltas)
 scenario_pred = float(best_model.predict(scenario_df)[0])
 delta_pred = scenario_pred - baseline_pred
 
-
 c1, c2, c3 = st.columns(3)
-c1.metric("Scenario predicted score", f"{scen_pred:.4f}")
+c1.metric("Scenario predicted score", f"{scenario_pred:.4f}")
 c2.metric("Δ vs baseline", f"{delta_pred:+.4f}")
 c3.metric("Drivers adjusted", f"{len(drivers)}")
 
 st.markdown("### Sensitivity tornado (one-at-a-time)")
-# sensitivity tornado code continues here
 
-    # One-at-a-time sensitivity around baseline for selected drivers
-    rows = []
-    for k in drivers:
-        one = baseline_df.copy()
-        one.loc[0, k] = float(one.loc[0, k]) + float(changes[k])
-        pred = float(best_model.predict(one)[0])
-        rows.append({"driver": k, "delta": pred - baseline_pred})
+rows = []
+for k in drivers:
+    one = baseline_df.copy()
+    one.loc[0, k] = float(one.loc[0, k]) + float(changes[k])
+    pred = float(best_model.predict(one)[0])
+    rows.append({"driver": k, "delta": pred - baseline_pred})
+
 
     sens = pd.DataFrame(rows).sort_values("delta")
     if PLOTLY_OK:
