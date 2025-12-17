@@ -619,8 +619,9 @@ c1.metric("Scenario predicted score", f"{scen_pred:.4f}")
 c2.metric("Δ vs baseline", f"{delta_pred:+.4f}")
 c3.metric("Drivers adjusted", f"{len(drivers)}")
 
+st.markdown("### Sensitivity tornado (one-at-a-time)")
+# sensitivity tornado code continues here
 
-    st.markdown("### Sensitivity tornado (one-at-a-time)")
     # One-at-a-time sensitivity around baseline for selected drivers
     rows = []
     for k in drivers:
