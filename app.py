@@ -583,13 +583,16 @@ with tab_scenarios:
     cols = st.columns(2)
     for i, d in enumerate(drivers):
         with cols[i % 2]:
-            changes[d] = st.slider(
-                f"{d} (Δ)",
-                min_value=float(-scenario_step * 5),
-                max_value=float(scenario_step * 5),
-                value=0.0,
-                step=float(scenario_step),
-            )
+           default_delta = scenario_step if "green" in d.lower() or "renew" in d.lower() else 0.0
+
+changes[d] = st.slider(
+    f"{d} (Δ)",
+    min_value=float(-scenario_step * 5),
+    max_value=float(scenario_step * 5),
+    value=float(default_delta),
+    step=float(scenario_step),
+)
+
 
     # Run scenario
     scen = baseline_df.copy()
