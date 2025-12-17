@@ -72,6 +72,20 @@ def load_csv(uploaded_file=None, path=None):
         "No dataset found. Upload a CSV in the sidebar, or add it to your repo under data/..."
     )
 
+# -------------------------
+# Scenario engine
+# -------------------------
+def run_scenario(baseline_df, deltas):
+    """
+    Apply relative deltas to a 1-row baseline dataframe and return scenario dataframe.
+    """
+    scen = baseline_df.copy()
+
+    for col, delta in deltas.items():
+        if col in scen.columns:
+            scen[col] = scen[col] + float(delta)
+
+    return scen
 
 def infer_target_column(df: pd.DataFrame):
     # Prefer exact match, else pick a likely target by name
@@ -594,13 +608,12 @@ changes[d] = st.slider(
 )
 
 
-    # Run scenario
-    scen = baseline_df.copy()
-    for k, delta in changes.items():
-        scen.loc[0, k] = float(scen.loc[0, k]) + float(delta)
 
-    scen_pred = float(best_model.predict(scen)[0])
-    delta_pred = scen_pred - baseline_pred
+     
+scenario_df = run_scenario(baseline_df, deltas)
+scenario_pred = float(best_model.predict(scenario_df)[0])
+delta_pred = scenario_pred - baseline_pred
+
 
     c1, c2, c3 = st.columns(3)
     c1.metric("Scenario predicted score", f"{scen_pred:.4f}")
