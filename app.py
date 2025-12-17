@@ -1,231 +1,170 @@
-# ===============================
-# Urban Sustainability Score App
-# Stable, Guarded, Cloud-Safe
-# ===============================
+# =========================================================
+# Urban Sustainability Score
+# Drivers, Trade-offs, and Scenario Simulator
+# =========================================================
 
 import os
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-from sklearn.linear_model import Ridge
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 
-# Optional Plotly
-try:
-    import plotly.express as px
-    PLOTLY_OK = True
-except Exception:
-    PLOTLY_OK = False
+import plotly.express as px
 
-# -------------------------------
+# ---------------------------------------------------------
 # Page config
-# -------------------------------
+# ---------------------------------------------------------
 st.set_page_config(
-    page_title="Urban Sustainability Score – Drivers & Scenario Simulator",
+    page_title="Urban Sustainability Score – Scenario Simulator",
     layout="wide",
 )
 
 st.title("Urban Sustainability Score — Drivers, Trade-offs, and Scenario Simulator")
-st.caption("Interactive exploration, modeling, and what-if scenarios (Streamlit)")
+st.caption("Scenario-based exploration using a trained regression model")
 
-# -------------------------------
-# Utilities
-# -------------------------------
-def find_default_csv():
-    candidates = [
-        "data/urban_planning_dataset.csv",
-        "data/raw/urban_planning_dataset.csv",
-        "data/processed/urban_planning_dataset.csv",
-        "urban_planning_dataset.csv",
-    ]
-    for c in candidates:
-        if os.path.exists(c):
-            return c
-    return None
+# ---------------------------------------------------------
+# Load data
+# ---------------------------------------------------------
+DATA_PATH = "urban_planning_dataset.csv"
 
-@st.cache_data(show_spinner=False)
-def load_csv(path):
+@st.cache_data
+def load_data(path):
     return pd.read_csv(path)
 
-# -------------------------------
-# Load data
-# -------------------------------
-path = find_default_csv()
-uploaded = st.file_uploader("Upload dataset (CSV)", type="csv")
+df = load_data(DATA_PATH)
 
-if uploaded is not None:
-    df = load_csv(uploaded)
-elif path is not None:
-    df = load_csv(path)
-else:
-    st.error("No dataset found. Upload a CSV to continue.")
-    st.stop()
+target = "urban_sustainability_score"
+features = [c for c in df.columns if c != target]
 
-st.success(f"Loaded dataset with {df.shape[0]} rows and {df.shape[1]} columns")
+X = df[features]
+y = df[target]
 
-# -------------------------------
-# Select target
-# -------------------------------
-numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-
-target_col = st.selectbox(
-    "Select target variable (sustainability score)",
-    numeric_cols,
-)
-
-if target_col is None:
-    st.stop()
-
-X = df.drop(columns=[target_col])
-y = df[target_col]
-
-# -------------------------------
-# Train model (lightweight)
-# -------------------------------
-@st.cache_resource(show_spinner=False)
+# ---------------------------------------------------------
+# Train model (lightweight + stable)
+# ---------------------------------------------------------
+@st.cache_resource
 def train_model(X, y):
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-
     model = Pipeline(
         steps=[
             ("scaler", StandardScaler()),
-            ("ridge", Ridge(alpha=1.0)),
+            ("ridge", Ridge(alpha=1.0))
         ]
     )
-    model.fit(X_train, y_train)
-    return model, X_test
+    model.fit(X, y)
+    return model
 
-best_model, X_test = train_model(X, y)
+model = train_model(X, y)
 
-# -------------------------------
-# Baseline
-# -------------------------------
-baseline_df = X_test.iloc[[0]].copy()
-baseline_pred = float(best_model.predict(baseline_df)[0])
+# ---------------------------------------------------------
+# Baseline city profile (median)
+# ---------------------------------------------------------
+baseline = X.median().to_frame().T
+baseline_pred = float(model.predict(baseline)[0])
 
-st.markdown(f"**Baseline predicted score:** `{baseline_pred:.4f}`")
+st.subheader("Baseline city profile")
+st.write(f"**Baseline predicted score:** `{baseline_pred:.4f}`")
 
-# -------------------------------
-# Tabs
-# -------------------------------
-tabs = st.tabs(["Overview", "Scenario Simulator"])
+# ---------------------------------------------------------
+# Scenario simulator
+# ---------------------------------------------------------
+st.subheader("Choose scenario drivers")
 
-# ===============================
-# OVERVIEW TAB
-# ===============================
-with tabs[0]:
-    st.subheader("Dataset preview")
-    st.dataframe(df.head())
+numeric_features = X.select_dtypes(include=[np.number]).columns.tolist()
 
-# ===============================
-# SCENARIO SIMULATOR TAB
-# ===============================
-with tabs[1]:
-    st.subheader("What-if Scenarios")
+drivers = st.multiselect(
+    "Numeric drivers to adjust",
+    options=numeric_features,
+    default=[
+        "public_transport_access",
+        "green_cover_percentage",
+        "carbon_footprint",
+        "renewable_energy_usage",
+        "disaster_risk_index",
+    ],
+)
 
-    drivers = st.multiselect(
-        "Choose scenario drivers",
-        X.columns.tolist(),
-        default=X.columns[:5].tolist(),
-    )
+st.subheader("Set changes (relative deltas)")
 
-    if not drivers:
-        st.info("Select at least one driver.")
-        st.stop()
+changes = {}
+cols = st.columns(2)
 
-    scenario_step = st.slider(
-        "Scenario step size (relative change)",
-        min_value=0.01,
-        max_value=0.5,
-        value=0.05,
-        step=0.01,
-    )
-
-    # ---------------------------
-    # Sliders
-    # ---------------------------
-    changes = {}
-    cols = st.columns(2)
-
-    for i, d in enumerate(drivers):
-        with cols[i % 2]:
-            changes[d] = st.slider(
-                f"{d} (Δ)",
-                min_value=-5 * scenario_step,
-                max_value=5 * scenario_step,
-                value=0.0,
-                step=scenario_step,
-            )
-
-    # ---------------------------
-    # Scenario execution
-    # ---------------------------
-    scen = baseline_df.copy()
-    for k, delta in changes.items():
-        if k in scen.columns:
-            scen.loc[scen.index[0], k] += delta
-
-    scenario_pred = float(best_model.predict(scen)[0])
-    delta_pred = scenario_pred - baseline_pred
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Scenario predicted score", f"{scenario_pred:.4f}")
-    c2.metric("Δ vs baseline", f"{delta_pred:+.4f}")
-    c3.metric("Drivers adjusted", f"{len(drivers)}")
-
-    # ---------------------------
-    # Sensitivity tornado
-    # ---------------------------
-    st.markdown("### Sensitivity tornado (one-at-a-time)")
-
-    rows = []
-    for d in drivers:
-        test = baseline_df.copy()
-        test.loc[test.index[0], d] += scenario_step
-        pred = float(best_model.predict(test)[0])
-        rows.append(
-            {"driver": d, "delta": pred - baseline_pred}
+for i, d in enumerate(drivers):
+    with cols[i % 2]:
+        changes[d] = st.slider(
+            f"{d} (Δ)",
+            min_value=-0.5,
+            max_value=0.5,
+            step=0.05,
+            value=0.0,
         )
 
-    sens = pd.DataFrame(rows).sort_values("delta")
+# ---------------------------------------------------------
+# Apply scenario
+# ---------------------------------------------------------
+scenario = baseline.copy()
 
-    if sens["delta"].abs().sum() == 0:
-        st.info("All impacts are ~0 at this step size. Increase step size to see effects.")
-    else:
-        if PLOTLY_OK:
-            fig = px.bar(
-                sens,
-                x="delta",
-                y="driver",
-                orientation="h",
-                title="Driver impact on predicted score",
-            )
-            fig.add_vline(x=0)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.bar_chart(sens.set_index("driver"))
+for k, delta in changes.items():
+    scenario.loc[0, k] = scenario.loc[0, k] + delta
 
-    # ---------------------------
-    # Download
-    # ---------------------------
-    st.markdown("### Download scenario outputs")
+scenario_pred = float(model.predict(scenario)[0])
+delta_pred = scenario_pred - baseline_pred
 
-    out = pd.DataFrame(
+# ---------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------
+c1, c2, c3 = st.columns(3)
+c1.metric("Scenario predicted score", f"{scenario_pred:.4f}")
+c2.metric("Δ vs baseline", f"{delta_pred:+.4f}")
+c3.metric("Drivers adjusted", len(drivers))
+
+# ---------------------------------------------------------
+# Sensitivity tornado (ONE-AT-A-TIME)
+# ---------------------------------------------------------
+st.subheader("Sensitivity tornado (one-at-a-time)")
+
+rows = []
+
+for k in drivers:
+    temp = baseline.copy()
+    temp.loc[0, k] += 0.1
+    pred = float(model.predict(temp)[0])
+    rows.append(
         {
-            "baseline_pred": [baseline_pred],
-            "scenario_pred": [scenario_pred],
-            "delta_pred": [delta_pred],
+            "driver": k,
+            "delta": pred - baseline_pred,
         }
     )
 
-    st.download_button(
-        "Download results (CSV)",
-        out.to_csv(index=False),
-        file_name="scenario_results.csv",
-        mime="text/csv",
-    )
+sens = pd.DataFrame(rows).sort_values("delta")
+
+fig = px.bar(
+    sens,
+    x="delta",
+    y="driver",
+    orientation="h",
+    title="Driver impact on predicted score (one-at-a-time)",
+)
+fig.add_vline(x=0)
+
+st.plotly_chart(fig, use_container_width=True)
+
+# ---------------------------------------------------------
+# Download scenario output
+# ---------------------------------------------------------
+st.subheader("Download scenario output")
+
+out = scenario.copy()
+out["baseline_pred"] = baseline_pred
+out["scenario_pred"] = scenario_pred
+out["delta_pred"] = delta_pred
+
+st.download_button(
+    "Download scenario as CSV",
+    out.to_csv(index=False),
+    file_name="scenario_output.csv",
+    mime="text/csv",
+)
