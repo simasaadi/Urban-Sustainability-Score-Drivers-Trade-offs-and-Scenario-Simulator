@@ -609,7 +609,7 @@ changes[d] = st.slider(
 
 
      
-scenario_df = run_scenario(baseline_df, deltas)
+scenario_df = run_scenario(baseline_df, changes)
 scenario_pred = float(best_model.predict(scenario_df)[0])
 delta_pred = scenario_pred - baseline_pred
 
