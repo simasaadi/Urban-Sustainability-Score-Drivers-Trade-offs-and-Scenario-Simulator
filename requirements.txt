@@ -1,5 +1,6 @@
-streamlit>=1.30
+streamlit>=1.33
 pandas
 numpy
 scikit-learn
 plotly
+statsmodels
